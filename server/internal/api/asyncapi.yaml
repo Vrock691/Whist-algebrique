@@ -1,0 +1,8 @@
+asyncapi: 2.6.0
+info:
+  title: Whist Events
+  description: Whist Events
+  version: 1.0.0
+channels:
+  Ping:
+    description: Ping²
