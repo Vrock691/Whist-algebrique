@@ -1,9 +1,283 @@
 openapi: 3.1.0
 info:
-  title: Whist REST Endpoints
-  description: Whist REST Endpoints
-  version: 1.0.0
+  title: Whist API
+  description: REST API for managing Whist game lobbies and sessions.
+  version: 2.0.0
+
 servers:
-  - url: 'https'
+  - url: https://api.whist.vamary.fr/v1
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Lobby:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        join_code:
+          type: string
+          example: "WXYZ42"
+          description: Short alphanumeric code players can share to join the lobby.
+        owner_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [waiting, playing]
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/Member"
+        created_at:
+          type: string
+          format: date-time
+      required: [id, join_code, owner_id, status, members, created_at]
+
+    Member:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        joined_at:
+          type: string
+          format: date-time
+      required: [user_id, username, joined_at]
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required: [code, message]
+
 paths:
-  
+
+  /lobbies:
+    post:
+      summary: Create a lobby
+      description: Creates a new lobby. The authenticated user becomes the owner.
+      operationId: createLobby
+      responses:
+        "201":
+          description: Lobby created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lobby"
+        "403":
+          description: User is already in a lobby.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: ALREADY_IN_LOBBY
+                message: You must leave your current lobby before creating a new one.
+
+  /lobbies/{lobbyId}:
+    parameters:
+      - name: lobbyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      summary: Get lobby state
+      description: Returns the current state of the lobby, including its members and status.
+      operationId: getLobby
+      responses:
+        "200":
+          description: Lobby found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lobby"
+        "404":
+          description: Lobby not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: LOBBY_NOT_FOUND
+                message: No lobby exists with this ID.
+
+    delete:
+      summary: Destroy a lobby
+      description: >
+        Kicks all members and deletes the lobby. Only the lobby owner may call this.
+        Real-time kick events are dispatched to members via WebSocket before deletion.
+      operationId: destroyLobby
+      responses:
+        "202":
+          description: Lobby destruction accepted. Members will receive a kick event via WebSocket.
+        "403":
+          description: Caller is not the lobby owner.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: FORBIDDEN
+                message: Only the lobby owner can destroy it.
+        "404":
+          description: Lobby not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: LOBBY_NOT_FOUND
+                message: No lobby exists with this ID.
+
+  /lobbies/{lobbyId}/members:
+    parameters:
+      - name: lobbyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    post:
+      summary: Join a lobby
+      description: Adds the authenticated user to the lobby as a member.
+      operationId: joinLobby
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                join_code:
+                  type: string
+                  example: "WXYZ42"
+              required: [join_code]
+      responses:
+        "200":
+          description: Successfully joined the lobby.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lobby"
+        "403":
+          description: User is already in a lobby.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: ALREADY_IN_LOBBY
+                message: You must leave your current lobby before joining another.
+        "404":
+          description: Lobby not found or join code is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: LOBBY_NOT_FOUND
+                message: No lobby found for this join code.
+        "409":
+          description: Lobby is full or the game has already started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: LOBBY_NOT_JOINABLE
+                message: This lobby is no longer accepting new players.
+
+  /lobbies/{lobbyId}/members/me:
+    parameters:
+      - name: lobbyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    delete:
+      summary: Leave a lobby
+      description: >
+        Removes the authenticated user from the lobby.
+        If the user is the owner, ownership is transferred to another member.
+        If no members remain, the lobby is deleted automatically.
+      operationId: leaveLobby
+      responses:
+        "204":
+          description: Successfully left the lobby.
+        "404":
+          description: Lobby not found, or the user is not a member of it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: NOT_IN_LOBBY
+                message: You are not a member of this lobby.
+
+  /lobbies/{lobbyId}/game:
+    parameters:
+      - name: lobbyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    post:
+      summary: Start the game
+      description: >
+        Initiates the Whist game for this lobby. Only the lobby owner may call this.
+        Game events (deal, turns, scores) are dispatched to all members via WebSocket.
+      operationId: startGame
+      responses:
+        "202":
+          description: Game start accepted. Events will be dispatched via WebSocket.
+        "403":
+          description: Caller is not the lobby owner.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: FORBIDDEN
+                message: Only the lobby owner can start the game.
+        "404":
+          description: Lobby not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: LOBBY_NOT_FOUND
+                message: No lobby exists with this ID.
+        "409":
+          description: Not enough players, or the game has already started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: GAME_NOT_STARTABLE
+                message: You need at least 4 players to start a Whist game.
