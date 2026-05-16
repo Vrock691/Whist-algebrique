@@ -1,8 +1,512 @@
 asyncapi: 2.6.0
 info:
   title: Whist Events
-  description: Whist Events
+  description: AsyncAPI specification for a Whist card game, covering lobby and game lifecycle events.
   version: 1.0.0
+
 channels:
-  Ping:
-    description: Ping²
+  lobby/player/joined:
+    description: A player has joined the lobby.
+    subscribe:
+      operationId: onPlayerJoined
+      summary: Notified when a player enters the lobby.
+      message:
+        $ref: '#/components/messages/PlayerJoined'
+
+  lobby/player/leaved:
+    description: A player has voluntarily left the lobby.
+    subscribe:
+      operationId: onPlayerLeaved
+      summary: Notified when a player leaves the lobby.
+      message:
+        $ref: '#/components/messages/PlayerLeaved'
+
+  lobby/player/disconnected:
+    description: A player has disconnected unexpectedly from the lobby.
+    subscribe:
+      operationId: onPlayerDisconnected
+      summary: Notified when a player loses connection.
+      message:
+        $ref: '#/components/messages/PlayerDisconnected'
+
+  game/started:
+    description: The game has started. Waiting for the start of the turn.
+    subscribe:
+      operationId: onGameStarted
+      summary: Fired when the game begins.
+      message:
+        $ref: '#/components/messages/GameStarted'
+
+  game/aborted:
+    description: The game was aborted before completion (e.g. owner disconnection, owner stop).
+    subscribe:
+      operationId: onGameAborted
+      summary: Fired when the game is cancelled mid-session.
+      message:
+        $ref: '#/components/messages/GameAborted'
+
+  game/finished:
+    description: The game has ended naturally with a winner determined.
+    subscribe:
+      operationId: onGameFinished
+      summary: Fired when the game concludes.
+      message:
+        $ref: '#/components/messages/GameFinished'
+
+  turn/started:
+    description: A new turn has started.
+    subscribe:
+      operationId: onTurnStarted
+      summary: Fired at the beginning of each turn.
+      message:
+        $ref: '#/components/messages/TurnStarted'
+
+  turn/finished:
+    description: The current turn has ended.
+    subscribe:
+      operationId: onTurnFinished
+      summary: Fired when all players have completed their actions for this turn.
+      message:
+        $ref: '#/components/messages/TurnFinished'
+
+  fold/started:
+    description: A new fold (pli) has started within the current turn.
+    subscribe:
+      operationId: onFoldStarted
+      summary: Fired when a fold begins.
+      message:
+        $ref: '#/components/messages/FoldStarted'
+
+  fold/finished:
+    description: The fold has ended and the winner of the fold is determined.
+    subscribe:
+      operationId: onFoldFinished
+      summary: Fired when all players have played a card in this fold.
+      message:
+        $ref: '#/components/messages/FoldFinished'
+
+  bet/ask:
+    description: Server asks a specific player to place their bet.
+    subscribe:
+      operationId: onBetAsk
+      summary: Fired to prompt a player for their bet.
+      message:
+        $ref: '#/components/messages/BetAsk'
+
+  bet/placed:
+    description: A player sends their bet to the server.
+    publish:
+      operationId: placeBet
+      summary: Player places a bet.
+      message:
+        $ref: '#/components/messages/BetPlaced'
+
+  bet/completed:
+    description: All players have submitted their bets for the turn.
+    subscribe:
+      operationId: onBetCompleted
+      summary: Fired when the betting phase is over.
+      message:
+        $ref: '#/components/messages/BetCompleted'
+
+  play/ask:
+    description: Server asks a specific player to play a card.
+    subscribe:
+      operationId: onPlayAsk
+      summary: Fired to prompt a player to play a card.
+      message:
+        $ref: '#/components/messages/PlayAsk'
+
+  play/card:
+    description: A player sends the card they wish to play.
+    publish:
+      operationId: playCard
+      summary: Player plays a card.
+      message:
+        $ref: '#/components/messages/CardPlayed'
+
+components:
+  schemas:
+
+    Player:
+      type: object
+      required: [playerId, username]
+      properties:
+        playerId:
+          type: string
+          format: uuid
+          description: Unique identifier for the player.
+        username:
+          type: string
+          description: Display name of the player.
+
+    Card:
+      type: object
+      description: >
+        Represents a tarot card. ILMATO and ILBIE are special cards
+        with no suit and no rank, all other fields are required for non-joker cards.
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [NORMAL, ILMATO, ILBIE]
+          description: >
+            Card type. NORMAL requires suit and rank.
+            ILMATO and ILBIE have no suit or rank.
+        suit:
+          type: string
+          enum: [SPADES, HEARTS, DIAMONDS, CLUBS, TRUMPS]
+          description: >
+            The suit of the card. Required when type is NORMAL.
+            TRUMPS covers the 21 numbered trump cards (rank 1–21).
+        rank:
+          type: string
+          enum: [ '1','2','3','4','5','6','7','8','9','10',
+                  '11','12','13','14','15','16','17','18','19','20','21',
+                  'JACK','KNIGHT','QUEEN','KING' ]
+          description: >
+            The rank of the card. Required when type is NORMAL.
+            For suit TRUMPS: ranks 1–10 are used (trump cards are numbered 1–21,
+            use the numeric string, e.g. '1' to '21').
+            For suits SPADES/HEARTS/DIAMONDS/CLUBS: JACK, KNIGHT, QUEEN, KING
+            are the four court cards; 1–10 are pip cards.
+      examples:
+        - type: NORMAL
+          suit: TRUMPS
+          rank: '21'
+        - type: NORMAL
+          suit: HEARTS
+          rank: 'QUEEN'
+        - type: ILBIE
+        - type: ILMATO
+
+
+  messages:
+
+    PlayerJoined:
+      name: PlayerJoined
+      title: Player Joined
+      summary: Broadcast when a player successfully joins the lobby.
+      payload:
+        type: object
+        required: [gameId, player, playerCount]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          player:
+            $ref: '#/components/schemas/Player'
+          playerCount:
+            type: integer
+            description: Total number of players currently in the lobby.
+          joinedAt:
+            type: string
+            format: date-time
+
+    PlayerLeaved:
+      name: PlayerLeaved
+      title: Player Leaved
+      summary: Broadcast when a player voluntarily leaves the lobby.
+      payload:
+        type: object
+        required: [gameId, playerId]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          playerId:
+            type: string
+            format: uuid
+          playerCount:
+            type: integer
+          leavedAt:
+            type: string
+            format: date-time
+
+    PlayerDisconnected:
+      name: PlayerDisconnected
+      title: Player Disconnected
+      summary: Broadcast when a player loses connection unexpectedly.
+      payload:
+        type: object
+        required: [gameId, playerId]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          playerId:
+            type: string
+            format: uuid
+          disconnectedAt:
+            type: string
+            format: date-time
+          reconnectionDeadline:
+            type: string
+            format: date-time
+            description: Deadline before the player is considered permanently gone.
+
+    GameStarted:
+      name: GameStarted
+      title: Game Started
+      summary: Fired when the game officially begins.
+      payload:
+        type: object
+        required: [gameId, players, startedAt]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          players:
+            type: array
+            items:
+              $ref: '#/components/schemas/Player'
+          startedAt:
+            type: string
+            format: date-time
+
+    GameAborted:
+      name: GameAborted
+      title: Game Aborted
+      summary: Fired when the game is cancelled before completion.
+      payload:
+        type: object
+        required: [gameId, reason, abortedAt]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          reason:
+            type: string
+            enum: [PLAYER_DISCONNECTED, PLAYER_LEFT, TIMEOUT, SERVER_ERROR]
+          abortedAt:
+            type: string
+            format: date-time
+
+    GameFinished:
+      name: GameFinished
+      title: Game Finished
+      summary: Fired when the game concludes with a final ranking.
+      payload:
+        type: object
+        required: [gameId, rankings, finishedAt]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          rankings:
+            type: array
+            description: Players ordered by final score (best to worst).
+            items:
+              type: object
+              required: [playerId, score, rank]
+              properties:
+                playerId:
+                  type: string
+                  format: uuid
+                score:
+                  type: integer
+                rank:
+                  type: integer
+          finishedAt:
+            type: string
+            format: date-time
+
+    TurnStarted:
+      name: TurnStarted
+      title: Turn Started
+      summary: Fired at the beginning of a new turn.
+      payload:
+        type: object
+        required: [gameId, turnNumber, firstBettorId]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          turnNumber:
+            type: integer
+          firstBettorId:
+            type: string
+            format: uuid
+            description: Player who bets first this turn.
+
+    TurnFinished:
+      name: TurnFinished
+      title: Turn Finished
+      summary: Fired when all folds in a turn are complete.
+      payload:
+        type: object
+        required: [gameId, turnNumber, scores]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          turnNumber:
+            type: integer
+          scores:
+            type: object
+            description: Map of playerId to points earned this turn.
+            additionalProperties:
+              type: integer
+
+    FoldStarted:
+      name: FoldStarted
+      title: Fold Started
+      summary: Fired when a new fold begins within a turn.
+      payload:
+        type: object
+        required: [gameId, turnNumber, foldNumber, firstPlayerId]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          turnNumber:
+            type: integer
+          foldNumber:
+            type: integer
+          firstPlayerId:
+            type: string
+            format: uuid
+            description: Player who leads this fold.
+
+    FoldFinished:
+      name: FoldFinished
+      title: Fold Finished
+      summary: Fired when all players have played a card in the fold.
+      payload:
+        type: object
+        required: [gameId, turnNumber, foldNumber, winnerId, cardsPlayed]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          turnNumber:
+            type: integer
+          foldNumber:
+            type: integer
+          winnerId:
+            type: string
+            format: uuid
+            description: Player who won this fold.
+          cardsPlayed:
+            type: array
+            items:
+              type: object
+              required: [playerId, card]
+              properties:
+                playerId:
+                  type: string
+                  format: uuid
+                card:
+                  $ref: '#/components/schemas/Card'
+
+    BetAsk:
+      name: BetAsk
+      title: Bet Ask
+      summary: Server prompts a specific player to place their bet.
+      payload:
+        type: object
+        required: [gameId, turnNumber, playerId, minBet, maxBet]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          turnNumber:
+            type: integer
+          playerId:
+            type: string
+            format: uuid
+          minBet:
+            type: integer
+            description: Minimum allowed bet value.
+          maxBet:
+            type: integer
+            description: Maximum allowed bet value (usually number of folds in the turn).
+          timeoutSeconds:
+            type: integer
+            description: Seconds before an automatic bet is placed.
+
+    BetPlaced:
+      name: BetPlaced
+      title: Bet Placed
+      summary: Sent by a player to submit their bet for the turn.
+      payload:
+        type: object
+        required: [gameId, turnNumber, playerId, betValue]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          turnNumber:
+            type: integer
+          playerId:
+            type: string
+            format: uuid
+          betValue:
+            type: integer
+            description: Number of folds the player bets they will win.
+
+    BetCompleted:
+      name: BetCompleted
+      title: Bet Completed
+      summary: All players have placed their bets; the play phase begins.
+      payload:
+        type: object
+        required: [gameId, turnNumber, bets]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          turnNumber:
+            type: integer
+          bets:
+            type: object
+            description: Map of playerId to their bet value.
+            additionalProperties:
+              type: integer
+
+    PlayAsk:
+      name: PlayAsk
+      title: Play Ask
+      summary: Server prompts a specific player to play a card.
+      payload:
+        type: object
+        required: [gameId, turnNumber, foldNumber, playerId, allowedCards]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          turnNumber:
+            type: integer
+          foldNumber:
+            type: integer
+          playerId:
+            type: string
+            format: uuid
+          allowedCards:
+            type: array
+            description: Subset of the player's hand they are allowed to play.
+            items:
+              $ref: '#/components/schemas/Card'
+          timeoutSeconds:
+            type: integer
+
+    CardPlayed:
+      name: CardPlayed
+      title: Card Played
+      summary: Sent by a player to play a card in the current fold.
+      payload:
+        type: object
+        required: [gameId, turnNumber, foldNumber, playerId, card]
+        properties:
+          gameId:
+            type: string
+            format: uuid
+          turnNumber:
+            type: integer
+          foldNumber:
+            type: integer
+          playerId:
+            type: string
+            format: uuid
+          card:
+            $ref: '#/components/schemas/Card'
