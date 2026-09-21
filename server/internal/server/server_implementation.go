@@ -3,36 +3,35 @@ package server
 import (
 	"net/http"
 
-	"fr.vamary.whist-server/internal/server"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-func (j server.JoinLobbyRequestObject) CreateLobby(w http.ResponseWriter, r *http.Request) {
-	//TODO implement me
-	panic("implement me")
+type ServerImplementation struct{}
+
+func NewServer() *ServerImplementation {
+	return &ServerImplementation{}
 }
 
-func (j server.JoinLobbyJSONRequestBody) DestroyLobby(w http.ResponseWriter, r *http.Request, lobbyID openapi_types.UUID) {
-	//TODO implement me
-	panic("implement me")
+func (s *ServerImplementation) CreateLobby(w http.ResponseWriter, r *http.Request) {
+
 }
 
-func (j server.JoinLobbyJSONRequestBody) GetLobby(w http.ResponseWriter, r *http.Request, lobbyID openapi_types.UUID) {
-	//TODO implement me
-	panic("implement me")
+func (s *ServerImplementation) GetLobby(w http.ResponseWriter, r *http.Request, lobbyID openapi_types.UUID) {
+
 }
 
-func (j server.JoinLobbyJSONRequestBody) StartGame(w http.ResponseWriter, r *http.Request, lobbyID openapi_types.UUID) {
-	//TODO implement me
-	panic("implement me")
+func (s *ServerImplementation) DestroyLobby(w http.ResponseWriter, r *http.Request, lobbyID openapi_types.UUID) {
+
 }
 
-func (j server.JoinLobbyJSONRequestBody) JoinLobby(w http.ResponseWriter, r *http.Request, lobbyID openapi_types.UUID) {
-	//TODO implement me
-	panic("implement me")
+func (s *ServerImplementation) JoinLobby(w http.ResponseWriter, r *http.Request, lobbyID openapi_types.UUID) {
+
 }
 
-func (j server.JoinLobbyJSONRequestBody) LeaveLobby(w http.ResponseWriter, r *http.Request, lobbyID openapi_types.UUID) {
-	//TODO implement me
-	panic("implement me")
+func (s *ServerImplementation) LeaveLobby(w http.ResponseWriter, r *http.Request, lobbyID openapi_types.UUID) {
+
+}
+
+func (s *ServerImplementation) StartGame(w http.ResponseWriter, r *http.Request, lobbyID openapi_types.UUID) {
+
 }

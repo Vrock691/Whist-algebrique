@@ -1,13 +1,17 @@
 asyncapi: 2.6.0
 info:
   title: Whist Events
-  description: AsyncAPI specification for a Whist card game, covering lobby and game lifecycle events.
+  description: AsyncAPI specification for a Whist card game, covering lobby and game lifecycle event.
   version: 1.1.0
 
 servers:
   private:
-    url: ws.api.whist.vamary.fr
+    url: api.whist.vamary.fr/ws?gameId={gameId}
     protocol: wss
+    variables:
+      gameId:
+        description: UUID of the game room to join.
+        default: 00000000-0000-0000-0000-000000000000
     security:
       - bearerAuth: []
 

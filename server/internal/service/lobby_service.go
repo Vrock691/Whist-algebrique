@@ -1,3 +1,5 @@
-package main
+package service
 
-func main() {}
+func createLobby() {
+
+}

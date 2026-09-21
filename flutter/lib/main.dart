@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:whist_flutter_client/screens/home/JoinOrCreateGameScreen.dart';
+import 'package:whist_flutter_client/screens/home/join_or_create_game_screen.dart';
 
 void main() {
   runApp(const MyApp());
