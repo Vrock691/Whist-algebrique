@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+package: server
+output: ../internal/server/server.gen.go
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+  embedded-spec: true
+  server-urls: true
+output-options:
+  name-normalizer: ToCamelCaseWithInitialisms
+  response-type-suffix: Response
+  yaml-tags: true
+compatibility:
+  old-aliasing: false
+  old-merge-schemas: false
+  old-allof-sibling-merging: false
+  old-enum-conflicts: false

@@ -2,36 +2,48 @@ asyncapi: 2.6.0
 info:
   title: Whist Events
   description: AsyncAPI specification for a Whist card game, covering lobby and game lifecycle events.
-  version: 1.0.0
+  version: 1.1.0
+
+servers:
+  private:
+    url: ws.api.whist.vamary.fr
+    protocol: wss
+    security:
+      - bearerAuth: []
 
 channels:
+
+  # ── Lobby ────────────────────────────────────────────────────────────────
+
   lobby/player/joined:
     description: A player has joined the lobby.
-    subscribe:
+    publish:
       operationId: onPlayerJoined
       summary: Notified when a player enters the lobby.
       message:
         $ref: '#/components/messages/PlayerJoined'
 
-  lobby/player/leaved:
+  lobby/player/left:
     description: A player has voluntarily left the lobby.
-    subscribe:
-      operationId: onPlayerLeaved
+    publish:
+      operationId: onPlayerLeft
       summary: Notified when a player leaves the lobby.
       message:
-        $ref: '#/components/messages/PlayerLeaved'
+        $ref: '#/components/messages/PlayerLeft'
 
   lobby/player/disconnected:
     description: A player has disconnected unexpectedly from the lobby.
-    subscribe:
+    publish:
       operationId: onPlayerDisconnected
       summary: Notified when a player loses connection.
       message:
         $ref: '#/components/messages/PlayerDisconnected'
 
+  # ── Game lifecycle ────────────────────────────────────────────────────────
+
   game/started:
-    description: The game has started. Waiting for the start of the turn.
-    subscribe:
+    description: The game has started. Waiting for the start of the first turn.
+    publish:                          # server → client
       operationId: onGameStarted
       summary: Fired when the game begins.
       message:
@@ -39,7 +51,7 @@ channels:
 
   game/aborted:
     description: The game was aborted before completion (e.g. owner disconnection, owner stop).
-    subscribe:
+    publish:                          # server → client
       operationId: onGameAborted
       summary: Fired when the game is cancelled mid-session.
       message:
@@ -47,15 +59,19 @@ channels:
 
   game/finished:
     description: The game has ended naturally with a winner determined.
-    subscribe:
+    publish:                          # server → client
       operationId: onGameFinished
       summary: Fired when the game concludes.
       message:
         $ref: '#/components/messages/GameFinished'
 
+  # ── Turn ─────────────────────────────────────────────────────────────────
+
   turn/started:
-    description: A new turn has started.
-    subscribe:
+    description: >
+      A new turn has started. Each player receives their hand in this message
+      (only the cards belonging to the receiving player are included).
+    publish:                          # server → client
       operationId: onTurnStarted
       summary: Fired at the beginning of each turn.
       message:
@@ -63,15 +79,17 @@ channels:
 
   turn/finished:
     description: The current turn has ended.
-    subscribe:
+    publish:                          # server → client
       operationId: onTurnFinished
       summary: Fired when all players have completed their actions for this turn.
       message:
         $ref: '#/components/messages/TurnFinished'
 
+  # ── Fold ─────────────────────────────────────────────────────────────────
+
   fold/started:
     description: A new fold (pli) has started within the current turn.
-    subscribe:
+    publish:                          # server → client
       operationId: onFoldStarted
       summary: Fired when a fold begins.
       message:
@@ -79,15 +97,17 @@ channels:
 
   fold/finished:
     description: The fold has ended and the winner of the fold is determined.
-    subscribe:
+    publish:                          # server → client
       operationId: onFoldFinished
       summary: Fired when all players have played a card in this fold.
       message:
         $ref: '#/components/messages/FoldFinished'
 
+  # ── Bet ──────────────────────────────────────────────────────────────────
+
   bet/ask:
     description: Server asks a specific player to place their bet.
-    subscribe:
+    publish:                          # server → client
       operationId: onBetAsk
       summary: Fired to prompt a player for their bet.
       message:
@@ -95,7 +115,7 @@ channels:
 
   bet/placed:
     description: A player sends their bet to the server.
-    publish:
+    subscribe:                        # client → server
       operationId: placeBet
       summary: Player places a bet.
       message:
@@ -103,15 +123,17 @@ channels:
 
   bet/completed:
     description: All players have submitted their bets for the turn.
-    subscribe:
+    publish:                          # server → client
       operationId: onBetCompleted
       summary: Fired when the betting phase is over.
       message:
         $ref: '#/components/messages/BetCompleted'
 
+  # ── Play ─────────────────────────────────────────────────────────────────
+
   play/ask:
     description: Server asks a specific player to play a card.
-    subscribe:
+    publish:                          # server → client
       operationId: onPlayAsk
       summary: Fired to prompt a player to play a card.
       message:
@@ -119,15 +141,47 @@ channels:
 
   play/card:
     description: A player sends the card they wish to play.
-    publish:
+    subscribe:                        # client → server
       operationId: playCard
       summary: Player plays a card.
       message:
         $ref: '#/components/messages/CardPlayed'
 
+# ===========================================================================
 components:
+  # ===========================================================================
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: JWT token obtained during authentication.
+
   schemas:
 
+    # ── Envelope ─────────────────────────────────────────────────────────
+    Envelope:
+      type: object
+      description: >
+        Top-level wrapper for every WebSocket frame.
+        Both client→server and server→client messages use this shape.
+      required: [channel, payload]
+      properties:
+        channel:
+          type: string
+          description: Routing key matching the AsyncAPI channel path.
+          example: fold/finished
+        correlationId:
+          type: string
+          format: uuid
+          description: >
+            Optional. Set by the client on outbound messages (bet/placed,
+            play/card) to correlate server acknowledgements or errors.
+        payload:
+          type: object
+          description: The message payload as defined per channel.
+
+    # ── Domain objects ────────────────────────────────────────────────────
     Player:
       type: object
       required: [playerId, username]
@@ -143,8 +197,8 @@ components:
     Card:
       type: object
       description: >
-        Represents a tarot card. ILMATO and ILBIE are special cards
-        with no suit and no rank, all other fields are required for non-joker cards.
+        Represents a tarot card. ILMATO and ILBIE are special joker cards
+        with no suit and no rank; all other fields are required for NORMAL cards.
       required: [type]
       properties:
         type:
@@ -161,26 +215,48 @@ components:
             TRUMPS covers the 21 numbered trump cards (rank 1–21).
         rank:
           type: string
-          enum: [ '1','2','3','4','5','6','7','8','9','10',
-                  '11','12','13','14','15','16','17','18','19','20','21',
-                  'JACK','KNIGHT','QUEEN','KING' ]
+          enum:
+            - '1'
+            - '2'
+            - '3'
+            - '4'
+            - '5'
+            - '6'
+            - '7'
+            - '8'
+            - '9'
+            - '10'
+            - '11'
+            - '12'
+            - '13'
+            - '14'
+            - '15'
+            - '16'
+            - '17'
+            - '18'
+            - '19'
+            - '20'
+            - '21'
+            - JACK
+            - KNIGHT
+            - QUEEN
+            - KING
           description: >
             The rank of the card. Required when type is NORMAL.
-            For suit TRUMPS: ranks 1–10 are used (trump cards are numbered 1–21,
-            use the numeric string, e.g. '1' to '21').
+            For suit TRUMPS: use the numeric string '1' to '21'.
             For suits SPADES/HEARTS/DIAMONDS/CLUBS: JACK, KNIGHT, QUEEN, KING
-            are the four court cards; 1–10 are pip cards.
+            are the four court cards; '1'–'10' are pip cards.
       examples:
         - type: NORMAL
           suit: TRUMPS
           rank: '21'
         - type: NORMAL
           suit: HEARTS
-          rank: 'QUEEN'
+          rank: QUEEN
         - type: ILBIE
         - type: ILMATO
 
-
+  # ── Messages ──────────────────────────────────────────────────────────────
   messages:
 
     PlayerJoined:
@@ -203,9 +279,9 @@ components:
             type: string
             format: date-time
 
-    PlayerLeaved:
-      name: PlayerLeaved
-      title: Player Leaved
+    PlayerLeft:                       # fix: was 'PlayerLeaved'
+      name: PlayerLeft
+      title: Player Left
       summary: Broadcast when a player voluntarily leaves the lobby.
       payload:
         type: object
@@ -219,7 +295,7 @@ components:
             format: uuid
           playerCount:
             type: integer
-          leavedAt:
+          leftAt:                     # fix: was 'leavedAt'
             type: string
             format: date-time
 
@@ -314,10 +390,10 @@ components:
     TurnStarted:
       name: TurnStarted
       title: Turn Started
-      summary: Fired at the beginning of a new turn.
+      summary: Fired at the beginning of a new turn. Includes the player's dealt hand.
       payload:
         type: object
-        required: [gameId, turnNumber, firstBettorId]
+        required: [gameId, turnNumber, firstBettorId, hand]
         properties:
           gameId:
             type: string
@@ -328,6 +404,13 @@ components:
             type: string
             format: uuid
             description: Player who bets first this turn.
+          hand:                       # fix: added — players need their cards
+            type: array
+            description: >
+              Cards dealt to the receiving player for this turn.
+              Only the recipient's own cards are included.
+            items:
+              $ref: '#/components/schemas/Card'
 
     TurnFinished:
       name: TurnFinished
@@ -344,7 +427,7 @@ components:
             type: integer
           scores:
             type: object
-            description: Map of playerId to points earned this turn.
+            description: Map of playerId → points earned this turn.
             additionalProperties:
               type: integer
 
@@ -444,6 +527,12 @@ components:
           betValue:
             type: integer
             description: Number of folds the player bets they will win.
+          correlationId:
+            type: string
+            format: uuid
+            description: >
+              Client-generated ID to match server acknowledgements or error
+              responses back to this specific action.
 
     BetCompleted:
       name: BetCompleted
@@ -460,7 +549,7 @@ components:
             type: integer
           bets:
             type: object
-            description: Map of playerId to their bet value.
+            description: Map of playerId → bet value.
             additionalProperties:
               type: integer
 
@@ -510,3 +599,9 @@ components:
             format: uuid
           card:
             $ref: '#/components/schemas/Card'
+          correlationId:
+            type: string
+            format: uuid
+            description: >
+              Client-generated ID to match server acknowledgements or error
+              responses back to this specific action.
